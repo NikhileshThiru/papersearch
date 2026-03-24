@@ -1,0 +1,650 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: PaperSearch API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: search
+    description: Search operations
+  - name: papers
+    description: Paper operations
+  - name: auth
+    description: Authentication operations
+  - name: stats
+    description: Index statistics
+  - name: admin
+    description: Admin operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server and DB health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /health:
+    get:
+      operationId: health
+      tags: [health]
+      summary: Health check (alias)
+      description: Alias for /healthz — returns server and DB health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /search:
+    get:
+      operationId: searchPapers
+      tags: [search]
+      summary: Search academic papers
+      description: BM25-ranked full-text search over indexed papers
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Query string (supports -exclusions, "phrases", AND, field:prefix)
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: yearFrom
+          in: query
+          schema:
+            type: integer
+        - name: yearTo
+          in: query
+          schema:
+            type: integer
+        - name: fieldOfStudy
+          in: query
+          schema:
+            type: string
+        - name: minCitations
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimitError"
+
+  /search/suggest:
+    get:
+      operationId: suggestTerms
+      tags: [search]
+      summary: Autocomplete suggestions
+      description: Returns up to 10 term suggestions based on prefix
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Prefix to complete
+      responses:
+        "200":
+          description: Suggestions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuggestResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /papers/{id}:
+    get:
+      operationId: getPaper
+      tags: [papers]
+      summary: Get paper by ID
+      description: Returns full detail for a single paper
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Semantic Scholar paper ID
+      responses:
+        "200":
+          description: Paper detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaperDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /papers/{id}/similar:
+    get:
+      operationId: getSimilarPapers
+      tags: [papers]
+      summary: Get similar papers
+      description: Returns papers with highest term overlap to the given paper
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Semantic Scholar paper ID
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+      responses:
+        "200":
+          description: Similar papers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Index statistics
+      description: Returns aggregate statistics about the search index
+      responses:
+        "200":
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      description: Creates a user account and returns a JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      description: Authenticates with email + API key and returns a JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/query-logs:
+    get:
+      operationId: getQueryLogs
+      tags: [admin]
+      summary: Get query logs (admin only)
+      description: Returns paginated query log entries. Requires admin JWT.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Query logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryLogsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/reindex:
+    post:
+      operationId: reindex
+      tags: [admin]
+      summary: Trigger reindex (admin only)
+      description: Starts a background reindex of all un-indexed documents. Requires admin JWT.
+      security:
+        - bearerAuth: []
+      responses:
+        "202":
+          description: Reindex started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReindexResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        db:
+          type: string
+        redis:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+
+    RateLimitError:
+      type: object
+      properties:
+        error:
+          type: string
+        retryAfter:
+          type: integer
+      required:
+        - error
+        - retryAfter
+
+    PaperResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        paperId:
+          type: string
+        title:
+          type: string
+        authors:
+          type: string
+        year:
+          type: integer
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+        venue:
+          type: string
+          nullable: true
+        citationCount:
+          type: integer
+          nullable: true
+        fieldOfStudy:
+          type: string
+          nullable: true
+        score:
+          type: number
+      required:
+        - id
+        - paperId
+        - title
+        - authors
+        - score
+
+    SearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaperResult"
+        suggestion:
+          type: string
+          nullable: true
+        latencyMs:
+          type: integer
+      required:
+        - query
+        - total
+        - page
+        - pageSize
+        - results
+        - latencyMs
+
+    SuggestResponse:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: string
+      required:
+        - suggestions
+
+    PaperDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        paperId:
+          type: string
+        title:
+          type: string
+        authors:
+          type: string
+        year:
+          type: integer
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+        venue:
+          type: string
+          nullable: true
+        citationCount:
+          type: integer
+          nullable: true
+        fieldOfStudy:
+          type: string
+          nullable: true
+        externalIds:
+          type: object
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        indexedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - paperId
+        - title
+        - authors
+
+    SimilarResponse:
+      type: object
+      properties:
+        papers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaperResult"
+      required:
+        - papers
+
+    StatsResponse:
+      type: object
+      properties:
+        total_docs:
+          type: integer
+        total_terms:
+          type: integer
+        avgdl:
+          type: number
+        avgdl_title:
+          type: number
+        avgdl_abstract:
+          type: number
+        last_indexed_at:
+          type: string
+          nullable: true
+        totalDocs:
+          type: integer
+        totalTerms:
+          type: integer
+        avgdlTitle:
+          type: number
+        avgdlAbstract:
+          type: number
+        lastIndexedAt:
+          type: string
+          nullable: true
+      required:
+        - total_docs
+        - total_terms
+        - avgdl
+        - totalDocs
+        - totalTerms
+        - avgdlTitle
+        - avgdlAbstract
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        apiKey:
+          type: string
+          minLength: 16
+      required:
+        - email
+        - apiKey
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        apiKey:
+          type: string
+      required:
+        - email
+        - apiKey
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        userId:
+          type: integer
+        email:
+          type: string
+        plan:
+          type: string
+      required:
+        - token
+        - userId
+        - email
+        - plan
+
+    QueryLogEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+          nullable: true
+        query:
+          type: string
+        filters:
+          type: object
+          nullable: true
+        resultCount:
+          type: integer
+          nullable: true
+        latencyMs:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - query
+
+    QueryLogsResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueryLogEntry"
+      required:
+        - total
+        - page
+        - pageSize
+        - logs
+
+    ReindexResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        queued:
+          type: integer
+      required:
+        - message
+        - queued

@@ -1,0 +1,11 @@
+packages:
+  "framer-motion": "For smooth page transitions and polished entry animations"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility for merging tailwind classes without style conflicts"
+  "date-fns": "For formatting dates if needed"
+
+images: []
+
+notes:
+  - Using @workspace/api-client-react for all API interactions
+  - Relies on existing shadcn ui components in src/components/ui

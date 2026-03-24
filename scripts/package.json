@@ -1,0 +1,22 @@
+{
+  "name": "@workspace/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "hello": "tsx ./src/hello.ts",
+    "ingest": "tsx ./src/ingest.ts",
+    "index-documents": "tsx ./src/index-documents.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "natural": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/natural": "^5.1.5",
+    "@types/node": "catalog:",
+    "tsx": "catalog:"
+  }
+}
