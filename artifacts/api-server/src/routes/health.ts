@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { createClient } from "redis";
+import { getRedisClient } from "../lib/redis.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
@@ -16,29 +16,14 @@ async function checkDb(): Promise<"ok" | "error"> {
 }
 
 async function checkRedis(): Promise<"ok" | "error" | "not_configured"> {
-  const redisUrl =
-    process.env["REDIS_URL"] ??
-    process.env["REDIS_TLS_URL"] ??
-    process.env["REDIS_PRIVATE_URL"];
-
-  if (!redisUrl) {
-    return "not_configured";
-  }
-
-  let client;
+  const client = getRedisClient();
+  if (!client) return "not_configured";
   try {
-    client = createClient({ url: redisUrl });
-    await client.connect();
     await client.ping();
     return "ok";
   } catch (err) {
     logger.warn({ err }, "Redis health check failed");
     return "error";
-  } finally {
-    try {
-      await client?.disconnect();
-    } catch {
-    }
   }
 }
 

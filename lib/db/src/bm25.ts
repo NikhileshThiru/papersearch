@@ -1,11 +1,11 @@
 /**
- * BM25 scoring functions.
+ * BM25 scoring functions — single source of truth for all packages.
  *
- * BM25 parameters (tunable):
+ * Parameters:
  *   k1 = 1.5  — term frequency saturation
  *   b  = 0.75 — document length normalization
  *
- * Field boost multipliers applied at query time (defined here for reference):
+ * Field boost multipliers applied at query time:
  *   title    — 2.0
  *   abstract — 1.0
  *   authors  — 0.5
@@ -37,8 +37,8 @@ export function computeIdf(N: number, df: number): number {
  *
  * Formula: count(term in field) / total_tokens_in_field
  *
- * @param termCount       — how many times the term appears in the field
- * @param totalTokens     — total token count in the field (after stemming/stopword removal)
+ * @param termCount   — how many times the term appears in the field
+ * @param totalTokens — total token count in the field (after stemming/stopword removal)
  */
 export function computeTf(termCount: number, totalTokens: number): number {
   if (totalTokens === 0) return 0;
@@ -51,10 +51,10 @@ export function computeTf(termCount: number, totalTokens: number): number {
  * Formula:
  *   idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / avgdl))
  *
- * @param idf    — precomputed IDF from the terms table
- * @param tf     — normalized TF from the postings table
- * @param dl     — document length (token count) for this field
- * @param avgdl  — average document length across the corpus for this field
+ * @param idf   — precomputed IDF from the terms table
+ * @param tf    — normalized TF from the postings table
+ * @param dl    — document length (token count) for this field
+ * @param avgdl — average document length across the corpus for this field
  */
 export function bm25Score(
   idf: number,

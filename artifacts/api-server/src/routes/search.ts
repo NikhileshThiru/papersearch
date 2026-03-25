@@ -100,7 +100,11 @@ router.get(
     const stemmed = natural.PorterStemmer.stem(raw);
 
     const rows = await db
-      .selectDistinct({ term: termsTable.term, doc_freq: termsTable.doc_freq })
+      .selectDistinct({
+        term: termsTable.term,
+        display_term: termsTable.display_term,
+        doc_freq: termsTable.doc_freq,
+      })
       .from(termsTable)
       .innerJoin(postingsTable, eq(postingsTable.term_id, termsTable.id))
       .where(
@@ -112,7 +116,7 @@ router.get(
       .orderBy(sql`${termsTable.doc_freq} DESC`)
       .limit(10);
 
-    res.json({ suggestions: rows.map((r) => r.term) });
+    res.json({ suggestions: rows.map((r) => r.display_term ?? r.term) });
   },
 );
 

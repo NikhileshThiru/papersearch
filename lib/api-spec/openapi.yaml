@@ -518,23 +518,12 @@ components:
     StatsResponse:
       type: object
       properties:
-        total_docs:
-          type: integer
-        total_terms:
-          type: integer
-        avgdl:
-          type: number
-        avgdl_title:
-          type: number
-        avgdl_abstract:
-          type: number
-        last_indexed_at:
-          type: string
-          nullable: true
         totalDocs:
           type: integer
         totalTerms:
           type: integer
+        avgdl:
+          type: number
         avgdlTitle:
           type: number
         avgdlAbstract:
@@ -543,11 +532,9 @@ components:
           type: string
           nullable: true
       required:
-        - total_docs
-        - total_terms
-        - avgdl
         - totalDocs
         - totalTerms
+        - avgdl
         - avgdlTitle
         - avgdlAbstract
 

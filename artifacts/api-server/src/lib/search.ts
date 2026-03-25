@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { parseQuery, type FieldHint } from "./query-parser.js";
-import { BM25_K1, BM25_B, FIELD_BOOSTS } from "./bm25-constants.js";
+import { BM25_K1, BM25_B, FIELD_BOOSTS } from "@workspace/db";
 
 export interface SearchOptions {
   page?: number;

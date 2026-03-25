@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { documentsTable, postingsTable, termsTable } from "@workspace/db/schema";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { search } from "../lib/search.js";
 import { rateLimit } from "../middlewares/rate-limit.js";
 
@@ -58,22 +58,12 @@ router.get(
       return;
     }
 
-    const postings = await db
-      .select({ term_id: postingsTable.term_id })
-      .from(postingsTable)
-      .where(eq(postingsTable.doc_id, doc.id));
-
-    const termIds = [...new Set(postings.map((p) => p.term_id))];
-    if (termIds.length === 0) {
-      res.json({ papers: [] });
-      return;
-    }
-
     const termRows = await db
       .select({ term: termsTable.term })
-      .from(termsTable)
-      .where(inArray(termsTable.id, termIds.slice(0, 20)))
-      .orderBy(sql`idf DESC`)
+      .from(postingsTable)
+      .innerJoin(termsTable, eq(postingsTable.term_id, termsTable.id))
+      .where(eq(postingsTable.doc_id, doc.id))
+      .orderBy(sql`${termsTable.idf} DESC`)
       .limit(10);
 
     if (termRows.length === 0) {

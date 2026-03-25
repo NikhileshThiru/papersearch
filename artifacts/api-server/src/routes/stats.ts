@@ -33,14 +33,9 @@ router.get("/stats", async (_req: Request, res: Response): Promise<void> => {
   const avgdl = Number(((avgdlTitle + avgdlAbstract) / 2).toFixed(4));
 
   res.json({
-    total_docs: docsRow?.total ?? 0,
-    total_terms: termsRow?.total ?? 0,
-    avgdl,
-    avgdl_title: avgdlTitle,
-    avgdl_abstract: avgdlAbstract,
-    last_indexed_at: lastIndexedAt,
     totalDocs: docsRow?.total ?? 0,
     totalTerms: termsRow?.total ?? 0,
+    avgdl,
     avgdlTitle,
     avgdlAbstract,
     lastIndexedAt,

@@ -6,7 +6,8 @@ const tokenizer = new WordTokenizer();
 const STOPWORDS = new Set(stopwords);
 
 export interface TokenizedField {
-  tokens: string[];
+  tokens: string[];    // stemmed forms
+  originals: string[]; // unstemmed forms (parallel to tokens)
   positions: number[];
 }
 
@@ -19,6 +20,7 @@ export interface PreprocessedDocument {
 function tokenizeField(text: string): TokenizedField {
   const raw = tokenizer.tokenize(text.toLowerCase()) ?? [];
   const tokens: string[] = [];
+  const originals: string[] = [];
   const positions: number[] = [];
 
   for (let i = 0; i < raw.length; i++) {
@@ -27,10 +29,11 @@ function tokenizeField(text: string): TokenizedField {
     const stemmed = PorterStemmer.stem(word);
     if (!stemmed) continue;
     tokens.push(stemmed);
+    originals.push(word);
     positions.push(i);
   }
 
-  return { tokens, positions };
+  return { tokens, originals, positions };
 }
 
 export function preprocessDocument(

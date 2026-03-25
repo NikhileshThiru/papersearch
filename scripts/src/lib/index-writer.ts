@@ -1,7 +1,7 @@
 import { pool, db, type PoolClient } from "@workspace/db";
 import { indexStatsTable, type Document } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { computeTf } from "./bm25.js";
+import { computeTf } from "@workspace/db";
 import { preprocessDocument, type PreprocessedDocument } from "./preprocessor.js";
 
 export type IndexField = "title" | "abstract" | "authors";
@@ -42,24 +42,29 @@ export async function indexDocument(
     }
 
     // Collect unique terms and per-field term counts.
+    // Also track the first unstemmed form seen for each stem (for display_term).
     type TermEntry = { count: number; positions: number[] };
     type FieldEntry = { field: IndexField; tokens: string[]; termCounts: Map<string, TermEntry> };
 
     const fieldData: FieldEntry[] = [];
     const allTerms = new Set<string>();
+    const termToOriginal = new Map<string, string>();
 
     for (const [field, tokenized] of [
       ["title", preprocessed.title],
       ["abstract", preprocessed.abstract],
       ["authors", preprocessed.authors],
     ] as const) {
-      const { tokens, positions } = tokenized;
+      const { tokens, originals, positions } = tokenized;
       if (tokens.length === 0) continue;
 
       const termCounts = new Map<string, TermEntry>();
       for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i]!;
         const pos = positions[i]!;
+        if (!termToOriginal.has(token)) {
+          termToOriginal.set(token, originals[i]!);
+        }
         const existing = termCounts.get(token);
         if (existing) {
           existing.count++;
@@ -74,14 +79,15 @@ export async function indexDocument(
     }
 
     // Upsert each unique term once → doc_freq is per-document.
+    // display_term is stored only on INSERT (first unstemmed form seen); not overwritten on conflict.
     const termIdMap = new Map<string, number>();
     for (const term of allTerms) {
       const result = await client.query<{ id: number }>(
-        `INSERT INTO terms (term, doc_freq, idf)
-         VALUES ($1, 1, 0)
+        `INSERT INTO terms (term, doc_freq, idf, display_term)
+         VALUES ($1, 1, 0, $2)
          ON CONFLICT (term) DO UPDATE SET doc_freq = terms.doc_freq + 1, idf = 0
          RETURNING id`,
-        [term],
+        [term, termToOriginal.get(term) ?? term],
       );
       termIdMap.set(term, result.rows[0]!.id);
     }
