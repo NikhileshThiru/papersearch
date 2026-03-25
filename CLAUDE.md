@@ -54,6 +54,8 @@ cd scripts && tsx ./src/<script-name>.ts
 
 ## Architecture
 
+PRD: See `PRD.md` in repo root for full product requirements, current status, and build order.
+
 This is a **pnpm monorepo** for an academic paper search engine.
 
 ### Package structure
@@ -116,16 +118,16 @@ The generated files in `lib/api-zod/src/generated/` and `lib/api-client-react/sr
 | `NODE_ENV` | api-server | `development` relaxes JWT_SECRET requirement |
 
 ## Current Status
-- [ ] Pipeline fix: merged ingest + index into single `pnpm pipeline` command (in progress)
-- [ ] API key: SEMANTIC_SCHOLAR_API_KEY added to .env, header fix applied to semantic-scholar.ts
+- ✅ Pipeline fix: merged ingest + index into single `pnpm pipeline` command
+- ✅ API key: SEMANTIC_SCHOLAR_API_KEY added to .env, header fix applied to semantic-scholar.ts
+- ✅ Scaffolding removed: hello.ts and mockup-sandbox/ deleted
+- ✅ PRD.md created in repo root
 - [ ] Search: not yet verified — curl test against /api/search not run yet
 - [ ] Tests: none written yet
 - [ ] Deployment: not yet deployed to Railway
 
 ## Known Issues
-- semantic-scholar.ts was missing x-api-key header on fetch calls (fixed locally, not committed)
-- ingest.ts main() did not call indexer after inserting documents (fixed locally, not committed)
-- mockup-sandbox in artifacts/ is throwaway prototype, ignore it
+- semantic-scholar.ts x-api-key fix and ingest.ts pipeline fix are not yet committed
 
 ## Next Steps (in order)
 1. Verify pipeline runs end-to-end: `pnpm --filter @workspace/scripts run pipeline`
@@ -142,3 +144,4 @@ The generated files in `lib/api-zod/src/generated/` and `lib/api-client-react/sr
 - The .env file contains real secrets, never read it aloud or log its contents
 - When a Next Step is completed, say so and ask before moving to the next one
 - After completing any task or fixing any bug, automatically update the ## Current Status, ## Known Issues, and ## Next Steps sections of this file to reflect what changed. Do this without being asked. Mark completed items with ✅, add new issues discovered during the work, and reorder Next Steps to reflect current priority.
+- After completing any task, also update the ## Current Status table in PRD.md to reflect what changed.
