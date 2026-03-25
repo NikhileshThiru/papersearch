@@ -256,6 +256,7 @@ pnpm --filter @workspace/scripts run ingest  # populate + index papers
 | Database schema applied | ✅ |
 | Semantic Scholar API key configured | ✅ |
 | Ingest + index pipeline merged (single command) | ✅ |
+| README.md written | ✅ |
 | End-to-end search verified | ⏳ In progress |
 | Tests written | ❌ Not yet |
 | Railway deployment | ❌ Not yet |

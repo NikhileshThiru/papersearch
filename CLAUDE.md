@@ -122,6 +122,7 @@ The generated files in `lib/api-zod/src/generated/` and `lib/api-client-react/sr
 - ✅ API key: SEMANTIC_SCHOLAR_API_KEY added to .env, header fix applied to semantic-scholar.ts
 - ✅ Scaffolding removed: hello.ts and mockup-sandbox/ deleted
 - ✅ PRD.md created in repo root
+- ✅ README.md created in repo root
 - [ ] Search: not yet verified — curl test against /api/search not run yet
 - [ ] Tests: none written yet
 - [ ] Deployment: not yet deployed to Railway
