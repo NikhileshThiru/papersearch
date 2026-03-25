@@ -35,9 +35,12 @@ pnpm push-force               # Force-apply (drops conflicting constraints)
 
 ### Scripts (`scripts`)
 ```bash
-pnpm ingest                   # Fetch papers from Semantic Scholar API → DB
-pnpm index-documents          # Build inverted index from un-indexed documents
+pnpm pipeline                 # Full pipeline: fetch from Semantic Scholar → store → index (preferred)
+pnpm ingest                   # Alias for pipeline (same command)
+pnpm index-documents          # Repair/backfill tool: re-index already-ingested docs with no postings
 ```
+
+`SEMANTIC_SCHOLAR_API_KEY` must be set in `.env` for ingestion to work beyond the anonymous rate limit.
 
 ### Code generation (`lib/api-spec`)
 ```bash
@@ -51,7 +54,7 @@ cd scripts && tsx ./src/<script-name>.ts
 
 ## Architecture
 
-This is a **pnpm monorepo** for an academic paper search engine. There are no test files currently.
+This is a **pnpm monorepo** for an academic paper search engine.
 
 ### Package structure
 
@@ -65,7 +68,7 @@ lib/
 artifacts/
   api-server/       @workspace/api-server  — Express 5 REST API
   frontend/         @workspace/frontend    — React 18 SPA
-  mockup-sandbox/   @workspace/mockup-sandbox — UI prototype/playground
+  mockup-sandbox/   @workspace/mockup-sandbox — throwaway UI prototype, can be ignored
 
 scripts/            @workspace/scripts     — Data ingestion + indexing CLI tools
 ```
@@ -106,7 +109,36 @@ The generated files in `lib/api-zod/src/generated/` and `lib/api-client-react/sr
 | `DATABASE_URL` | api-server, db, scripts | PostgreSQL connection string |
 | `PORT` | api-server, frontend | Server port |
 | `JWT_SECRET` | api-server | Required in production; auto-generated in development |
-| `REDIS_URL` | api-server | Optional; used only for health check |
+| `REDIS_URL` | api-server | Optional; rate limiting falls back to in-memory if unset |
+| `SEMANTIC_SCHOLAR_API_KEY` | scripts | Optional but required beyond anonymous rate limit |
 | `BASE_PATH` | frontend | URL base path (default `/`) |
 | `BASE_URL` | frontend | API base URL (default `/api`) |
 | `NODE_ENV` | api-server | `development` relaxes JWT_SECRET requirement |
+
+## Current Status
+- [ ] Pipeline fix: merged ingest + index into single `pnpm pipeline` command (in progress)
+- [ ] API key: SEMANTIC_SCHOLAR_API_KEY added to .env, header fix applied to semantic-scholar.ts
+- [ ] Search: not yet verified — curl test against /api/search not run yet
+- [ ] Tests: none written yet
+- [ ] Deployment: not yet deployed to Railway
+
+## Known Issues
+- semantic-scholar.ts was missing x-api-key header on fetch calls (fixed locally, not committed)
+- ingest.ts main() did not call indexer after inserting documents (fixed locally, not committed)
+- mockup-sandbox in artifacts/ is throwaway prototype, ignore it
+
+## Next Steps (in order)
+1. Verify pipeline runs end-to-end: `pnpm --filter @workspace/scripts run pipeline`
+2. Verify search works: `curl "http://localhost:3000/api/search?q=neural+network"`
+3. Commit all working changes with message: `fix: pipeline end-to-end, API key header, ingest+index merged`
+4. Write tests for core search logic (query parser, BM25 ranking, Levenshtein)
+5. Set up Railway deployment connected to GitHub main branch
+6. Update PRD to reflect actual built system
+7. Update CLAUDE.md to mark completed items
+
+## Rules for Claude Code
+- Always check Current Status before suggesting what to do next
+- Never auto-commit — only commit when explicitly told to
+- The .env file contains real secrets, never read it aloud or log its contents
+- When a Next Step is completed, say so and ask before moving to the next one
+- After completing any task or fixing any bug, automatically update the ## Current Status, ## Known Issues, and ## Next Steps sections of this file to reflect what changed. Do this without being asked. Mark completed items with ✅, add new issues discovered during the work, and reorder Next Steps to reflect current priority.

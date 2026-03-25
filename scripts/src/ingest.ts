@@ -1,8 +1,10 @@
+import "dotenv/config";
 import { db } from "@workspace/db";
 import { documentsTable, type Document } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { searchPapers } from "./lib/semantic-scholar.js";
 import { preprocessDocument, type PreprocessedDocument } from "./lib/preprocessor.js";
+import { indexBatch } from "./lib/index-writer.js";
 
 export interface IngestedPaper {
   document: Document;
@@ -12,15 +14,8 @@ export interface IngestedPaper {
 
 const SEED_QUERIES = [
   "machine learning",
-  "deep learning",
-  "natural language processing",
-  "computer vision",
-  "distributed systems",
-  "reinforcement learning",
-  "graph neural networks",
-  "transformer attention",
-  "information retrieval",
-  "knowledge graphs",
+  "neural networks",
+  "transformer",
 ];
 
 interface IngestionStats {
@@ -122,6 +117,21 @@ export async function* ingestQuery(
   console.log();
 }
 
+const INDEX_BATCH_SIZE = 50;
+
+async function flushBatch(
+  batch: Array<{ document: Document; preprocessed: PreprocessedDocument }>,
+  totalIndexed: { count: number },
+  totalErrors: { count: number },
+): Promise<void> {
+  if (batch.length === 0) return;
+  const { indexed, errors } = await indexBatch(batch);
+  totalIndexed.count += indexed;
+  totalErrors.count += errors;
+  console.log(`\n[pipeline] Indexed batch: ${indexed}`);
+  batch.length = 0;
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -140,34 +150,61 @@ async function main() {
       ? [args[queryFlag + 1]!]
       : SEED_QUERIES;
 
-  console.log("[ingest] Starting PaperSearch ingestion pipeline");
+  console.log("[pipeline] Starting PaperSearch ingest + index pipeline");
   console.log(
-    `[ingest] Queries: ${queries.length}, limit per query: ${limitPerQuery}`,
+    `[pipeline] Queries: ${queries.length}, limit per query: ${limitPerQuery}`,
   );
 
-  const stats: IngestionStats = {
-    total: 0,
-    inserted: 0,
-    skipped: 0,
-    errors: 0,
-  };
+  const stats: IngestionStats = { total: 0, inserted: 0, skipped: 0, errors: 0 };
+  const totalIndexed = { count: 0 };
+  const totalErrors = { count: 0 };
 
   for (const query of queries) {
+    const pendingBatch: Array<{ document: Document; preprocessed: PreprocessedDocument }> = [];
+
     for await (const ingested of ingestQuery(query, limitPerQuery, stats)) {
-      if (ingested.wasNew) {
-        const { title, abstract, authors } = ingested.preprocessed;
-        process.stdout.write(
-          ` [tokens: title:${title.tokens.length} abstract:${abstract.tokens.length} authors:${authors.tokens.length}]\n`,
-        );
+      if (!ingested.wasNew) continue;
+
+      pendingBatch.push({
+        document: ingested.document,
+        preprocessed: ingested.preprocessed,
+      });
+
+      if (pendingBatch.length >= INDEX_BATCH_SIZE) {
+        await flushBatch(pendingBatch, totalIndexed, totalErrors);
       }
+    }
+
+    // Flush any remaining papers from this query
+    await flushBatch(pendingBatch, totalIndexed, totalErrors);
+  }
+
+  console.log("\n[pipeline] ====== Ingestion stats ======");
+  console.log(`[pipeline]   Total fetched  : ${stats.total}`);
+  console.log(`[pipeline]   Inserted (new) : ${stats.inserted}`);
+  console.log(`[pipeline]   Skipped (dup)  : ${stats.skipped}`);
+  console.log(`[pipeline]   Errors         : ${stats.errors}`);
+
+  const statsResult = await db.execute(
+    sql`SELECT key, value FROM index_stats ORDER BY key`,
+  );
+  console.log("\n[pipeline] ====== Index stats ======");
+  for (const row of statsResult.rows as Array<{ key: string; value: number }>) {
+    if (row.key === "last_indexed_at") {
+      console.log(`[pipeline]   ${row.key}: ${new Date(row.value * 1000).toISOString()}`);
+    } else {
+      console.log(`[pipeline]   ${row.key}: ${row.value}`);
     }
   }
 
-  console.log("\n[ingest] ====== Ingestion complete ======");
-  console.log(`[ingest]   Total fetched  : ${stats.total}`);
-  console.log(`[ingest]   Inserted (new) : ${stats.inserted}`);
-  console.log(`[ingest]   Skipped (dup)  : ${stats.skipped}`);
-  console.log(`[ingest]   Errors         : ${stats.errors}`);
+  const termsResult = await db.execute(sql`SELECT COUNT(*) AS count FROM terms`);
+  const postingsResult = await db.execute(sql`SELECT COUNT(*) AS count FROM postings`);
+  console.log(`[pipeline]   terms count: ${(termsResult.rows[0] as { count: string }).count}`);
+  console.log(`[pipeline]   postings count: ${(postingsResult.rows[0] as { count: string }).count}`);
+
+  console.log("\n[pipeline] ====== Run summary ======");
+  console.log(`[pipeline]   Indexed this run : ${totalIndexed.count}`);
+  console.log(`[pipeline]   Errors this run  : ${totalErrors.count}`);
 
   process.exit(0);
 }

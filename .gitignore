@@ -46,3 +46,8 @@ Thumbs.db
 
 .cache/
 .local/
+
+# Local environment variables — never commit
+.env
+.env.local
+.env.*.local

@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "dotenv": "^16.5.0",
     "@types/swagger-ui-express": "^4.1.8",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",

@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "pipeline": "tsx ./src/ingest.ts",
     "ingest": "tsx ./src/ingest.ts",
     "index-documents": "tsx ./src/index-documents.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "dotenv": "^16.5.0",
     "@workspace/db": "workspace:*",
     "drizzle-orm": "catalog:",
     "natural": "^8.1.0"

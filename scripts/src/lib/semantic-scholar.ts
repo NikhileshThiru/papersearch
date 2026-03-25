@@ -40,6 +40,11 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function buildHeaders(): HeadersInit {
+  const apiKey = process.env["SEMANTIC_SCHOLAR_API_KEY"];
+  return apiKey ? { "x-api-key": apiKey } : {};
+}
+
 async function fetchWithBackoff(
   url: string,
   attempt = 0,
@@ -50,7 +55,7 @@ async function fetchWithBackoff(
     );
   }
 
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: buildHeaders() });
 
   if (res.status === 429) {
     const retryAfter = res.headers.get("Retry-After");
@@ -69,7 +74,7 @@ async function fetchWithBackoff(
 
 export async function* searchPapers(
   query: string,
-  { limit = Infinity, pageSize = 100 }: { limit?: number; pageSize?: number } = {},
+  { limit = Infinity, pageSize = 10 }: { limit?: number; pageSize?: number } = {},
 ): AsyncGenerator<SemanticScholarPaper> {
   let offset = 0;
   let fetched = 0;
@@ -105,6 +110,6 @@ export async function* searchPapers(
 
     offset = data.next;
 
-    await sleep(200);
+    await sleep(2000);
   }
 }
