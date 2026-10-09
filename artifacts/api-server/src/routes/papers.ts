@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { documentsTable, postingsTable, termsTable } from "@workspace/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
 import { search } from "../lib/search.js";
 import { rateLimit } from "../middlewares/rate-limit.js";
 
@@ -58,12 +58,26 @@ router.get(
       return;
     }
 
+    // The paper's top TF-IDF topic terms (title/abstract) that also appear in at
+    // least one other paper — terms unique to this paper can never match anything else.
+    const weight = sql<number>`max(${termsTable.idf} * ${postingsTable.tf})`;
     const termRows = await db
-      .select({ term: termsTable.term })
+      .select({
+        term: termsTable.term,
+        display_term: termsTable.display_term,
+        weight,
+      })
       .from(postingsTable)
       .innerJoin(termsTable, eq(postingsTable.term_id, termsTable.id))
-      .where(eq(postingsTable.doc_id, doc.id))
-      .orderBy(sql`${termsTable.idf} DESC`)
+      .where(
+        and(
+          eq(postingsTable.doc_id, doc.id),
+          ne(postingsTable.field, "authors"),
+          gt(termsTable.doc_freq, 1),
+        ),
+      )
+      .groupBy(termsTable.term, termsTable.display_term)
+      .orderBy(desc(weight))
       .limit(10);
 
     if (termRows.length === 0) {
@@ -71,7 +85,8 @@ router.get(
       return;
     }
 
-    const queryStr = termRows.map((t) => t.term).join(" ");
+    // Use unstemmed forms: search() stems the query again.
+    const queryStr = termRows.map((t) => t.display_term ?? t.term).join(" ");
     const result = await search(queryStr, { pageSize: limit + 1 });
 
     const filtered = result.results

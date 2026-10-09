@@ -32,6 +32,10 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Forward API calls to the local api-server (artifacts/api-server, port 3000).
+    proxy: {
+      "/api": "http://localhost:3000",
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],

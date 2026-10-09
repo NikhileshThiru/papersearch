@@ -4,10 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "hello": "tsx ./src/hello.ts",
-    "pipeline": "tsx ./src/ingest.ts",
-    "ingest": "tsx ./src/ingest.ts",
-    "index-documents": "tsx ./src/index-documents.ts",
+    "pipeline": "tsx --env-file-if-exists=../.env ./src/ingest.ts",
+    "ingest": "tsx --env-file-if-exists=../.env ./src/ingest.ts",
+    "index-documents": "tsx --env-file-if-exists=../.env ./src/index-documents.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -40,7 +40,7 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function buildHeaders(): HeadersInit {
+function buildHeaders(): Record<string, string> {
   const apiKey = process.env["SEMANTIC_SCHOLAR_API_KEY"];
   return apiKey ? { "x-api-key": apiKey } : {};
 }

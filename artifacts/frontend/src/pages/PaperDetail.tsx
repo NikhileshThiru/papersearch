@@ -112,18 +112,18 @@ export function PaperDetail() {
                 </div>
 
                 <div className="flex flex-row sm:flex-col gap-3 shrink-0">
-                  {paper.url ? (
-                    <Button asChild size="lg" className="rounded-xl shadow-sm hover:shadow">
-                      <a href={paper.url} target="_blank" rel="noopener noreferrer" className="flex items-center">
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Source Link
-                      </a>
-                    </Button>
-                  ) : (
-                    <Button disabled size="lg" className="rounded-xl">
-                      No Link Available
-                    </Button>
-                  )}
+                  {/* Every paper is ingested from Semantic Scholar, so its page always exists. */}
+                  <Button asChild size="lg" className="rounded-xl shadow-sm hover:shadow">
+                    <a
+                      href={paper.url ?? `https://www.semanticscholar.org/paper/${paper.paperId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      {paper.url ? "Source Link" : "Semantic Scholar"}
+                    </a>
+                  </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" size="icon" className="rounded-xl" title="Save paper">
                       <BookmarkPlus className="w-4 h-4 text-muted-foreground" />

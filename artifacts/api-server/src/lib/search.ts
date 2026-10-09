@@ -1,7 +1,8 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { parseQuery, type FieldHint } from "./query-parser.js";
-import { BM25_K1, BM25_B, FIELD_BOOSTS } from "@workspace/db";
+import { parseQuery, stemWord, type FieldHint, type Phrase } from "./query-parser.js";
+import { levenshtein } from "./levenshtein.js";
+import { bm25Score, FIELD_BOOSTS } from "@workspace/db";
 
 export interface SearchOptions {
   page?: number;
@@ -117,9 +118,7 @@ function aggregateScores(
     const count = row.positions ? row.positions.length : 1;
     const dl = count > 0 && row.tf > 0 ? Math.round(count / row.tf) : avgdl;
 
-    const numerator = row.tf * (BM25_K1 + 1);
-    const denominator = row.tf + BM25_K1 * (1 - BM25_B + BM25_B * (dl / avgdl));
-    const bm25 = row.idf * (numerator / denominator) * boost;
+    const bm25 = bm25Score(row.idf, row.tf, dl, avgdl) * boost;
 
     scores.set(row.doc_id, (scores.get(row.doc_id) ?? 0) + bm25);
   }
@@ -128,12 +127,12 @@ function aggregateScores(
 }
 
 /**
- * Check phrase constraint: all phrase tokens must appear at consecutive positions
- * in at least one field.
+ * Check phrase constraint: all phrase tokens must appear at their relative
+ * offsets (consecutive, allowing for removed stopwords) in at least one field.
  */
 function matchesPhrase(
   docId: number,
-  phrases: string[][],
+  phrases: Phrase[],
   postings: PostingRow[],
 ): boolean {
   if (phrases.length === 0) return true;
@@ -150,7 +149,7 @@ function matchesPhrase(
     }
   }
 
-  for (const phraseTokens of phrases) {
+  for (const { tokens: phraseTokens, offsets } of phrases) {
     if (phraseTokens.length === 0) continue;
     let phraseMatched = false;
 
@@ -162,7 +161,7 @@ function matchesPhrase(
         let ok = true;
         for (let i = 1; i < phraseTokens.length; i++) {
           const positions = posMap.get(`${phraseTokens[i]}::${field}`);
-          if (!positions?.includes(startPos + i)) {
+          if (!positions?.includes(startPos + offsets[i]!)) {
             ok = false;
             break;
           }
@@ -229,43 +228,31 @@ async function fetchDocuments(
 }
 
 /**
- * Find the closest term in vocabulary (Levenshtein <= 2) for typo suggestion.
+ * Find the closest vocabulary term (Levenshtein <= 2) for each missed token.
+ * Returns a map from missed token to the correction's display (unstemmed) form.
  */
-async function findSuggestion(missedToken: string): Promise<string | undefined> {
+async function findCorrections(missedTokens: string[]): Promise<Map<string, string>> {
   const result = await db.execute(sql`
-    SELECT term FROM terms WHERE doc_freq >= 1 ORDER BY doc_freq DESC LIMIT 10000
+    SELECT term, display_term FROM terms WHERE doc_freq >= 1 ORDER BY doc_freq DESC LIMIT 10000
   `);
 
-  const terms = (result.rows as unknown as Array<{ term: string }>).map((r) => r.term);
-  let bestTerm: string | undefined;
-  let bestDist = Infinity;
+  const vocab = result.rows as unknown as Array<{ term: string; display_term: string | null }>;
+  const corrections = new Map<string, string>();
 
-  for (const candidate of terms) {
-    const dist = levenshtein(missedToken, candidate);
-    if (dist < bestDist && dist <= 2) {
-      bestDist = dist;
-      bestTerm = candidate;
+  for (const missed of missedTokens) {
+    let best: string | undefined;
+    let bestDist = Infinity;
+    for (const candidate of vocab) {
+      const dist = levenshtein(missed, candidate.term);
+      if (dist < bestDist && dist <= 2) {
+        bestDist = dist;
+        best = candidate.display_term ?? candidate.term;
+      }
     }
+    if (best) corrections.set(missed, best);
   }
 
-  return bestTerm;
-}
-
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
-  );
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i]![j] =
-        a[i - 1] === b[j - 1]
-          ? dp[i - 1]![j - 1]!
-          : 1 + Math.min(dp[i - 1]![j]!, dp[i]![j - 1]!, dp[i - 1]![j - 1]!);
-    }
-  }
-  return dp[m]![n]!;
+  return corrections;
 }
 
 /**
@@ -279,7 +266,8 @@ function levenshtein(a: string, b: string): number {
  *   - Default (OR): any doc matching at least one query token is a candidate.
  *   - requireAll=true or boolean AND in query: all query tokens must appear.
  *   - Exclusion: any doc containing an excluded term is removed.
- *   - Phrases: all phrase tokens must appear at consecutive positions.
+ *   - Phrases: all phrase tokens must appear at consecutive positions
+ *     (stopword gaps allowed).
  */
 export async function search(
   rawQuery: string,
@@ -301,13 +289,18 @@ export async function search(
     loadIndexStats(),
   ]);
 
-  // Typo tolerance: suggest for first token with zero hits.
+  // Typo tolerance: rewrite every query word whose stem has zero hits to its
+  // closest vocabulary term, so the suggestion is a full corrected query.
   let suggestion: string | undefined;
   const foundTerms = new Set(postings.map((p) => p.term));
-  for (const token of parsed.tokens) {
-    if (!foundTerms.has(token)) {
-      suggestion = await findSuggestion(token);
-      if (suggestion) break;
+  const missedTokens = parsed.tokens.filter((t) => !foundTerms.has(t));
+  if (missedTokens.length > 0) {
+    const corrections = await findCorrections(missedTokens);
+    if (corrections.size > 0) {
+      suggestion = rawQuery.replace(
+        /[a-z0-9]+/gi,
+        (word) => corrections.get(stemWord(word)) ?? word,
+      );
     }
   }
 

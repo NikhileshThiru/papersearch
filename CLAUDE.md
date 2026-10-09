@@ -17,11 +17,14 @@ pnpm dev                      # Build + start in development mode
 pnpm build                    # esbuild compile to dist/index.mjs
 pnpm start                    # Run compiled server (requires build first)
 pnpm typecheck                # Type-check only
+pnpm test                     # Unit tests (node --test via tsx): query parser, BM25, Levenshtein
 ```
+
+The server loads the repo-root `.env` via `node --env-file-if-exists=../../.env` in the `start` script.
 
 ### Frontend (`artifacts/frontend`)
 ```bash
-pnpm dev                      # Vite dev server on 0.0.0.0 (PORT env, default 5173)
+pnpm dev                      # Vite dev server on 0.0.0.0 (PORT env, default 5173); proxies /api to localhost:3000
 pnpm build                    # Vite production build → dist/public/
 pnpm serve                    # Preview production build
 pnpm typecheck
@@ -29,18 +32,18 @@ pnpm typecheck
 
 ### Database (`lib/db`)
 ```bash
-pnpm push                     # Apply Drizzle schema to DB (requires DATABASE_URL)
+pnpm push                     # Apply Drizzle schema to DB (DATABASE_URL from env or repo-root .env)
 pnpm push-force               # Force-apply (drops conflicting constraints)
 ```
 
 ### Scripts (`scripts`)
 ```bash
-pnpm pipeline                 # Full pipeline: fetch from Semantic Scholar → store → index (preferred)
+pnpm pipeline                 # Full pipeline: fetch from Semantic Scholar → store → index (preferred); --query <text>, --limit <N>
 pnpm ingest                   # Alias for pipeline (same command)
 pnpm index-documents          # Repair/backfill tool: re-index already-ingested docs with no postings
 ```
 
-`SEMANTIC_SCHOLAR_API_KEY` must be set in `.env` for ingestion to work beyond the anonymous rate limit.
+`SEMANTIC_SCHOLAR_API_KEY` must be set in `.env` for ingestion to work beyond the anonymous rate limit. Scripts load the repo-root `.env` via `tsx --env-file-if-exists=../.env` (a `dotenv` call inside the script can't work: ESM imports run before it, and `@workspace/db` throws without `DATABASE_URL`).
 
 ### Code generation (`lib/api-spec`)
 ```bash
@@ -70,7 +73,6 @@ lib/
 artifacts/
   api-server/       @workspace/api-server  — Express 5 REST API
   frontend/         @workspace/frontend    — React 18 SPA
-  mockup-sandbox/   @workspace/mockup-sandbox — throwaway UI prototype, can be ignored
 
 scripts/            @workspace/scripts     — Data ingestion + indexing CLI tools
 ```
@@ -118,26 +120,31 @@ The generated files in `lib/api-zod/src/generated/` and `lib/api-client-react/sr
 | `NODE_ENV` | api-server | `development` relaxes JWT_SECRET requirement |
 
 ## Current Status
-- ✅ Pipeline fix: merged ingest + index into single `pnpm pipeline` command
-- ✅ API key: SEMANTIC_SCHOLAR_API_KEY added to .env, header fix applied to semantic-scholar.ts
-- ✅ Scaffolding removed: hello.ts and mockup-sandbox/ deleted
-- ✅ PRD.md created in repo root
-- ✅ README.md created in repo root
-- [ ] Search: not yet verified — curl test against /api/search not run yet
-- [ ] Tests: none written yet
-- [ ] Deployment: not yet deployed to Railway
+Scope (decided 2026-10-09): local-only portfolio project — no deployment. Done = working locally + README with screenshots.
+
+- ✅ Pipeline: single `pnpm pipeline` command; 12 seed topics; 1,166 docs, 12,024 terms, 101,329 postings indexed
+- ✅ .env loading fixed everywhere: api-server `start` and scripts use Node `--env-file-if-exists`; drizzle.config.ts uses `process.loadEnvFile`
+- ✅ Search verified end-to-end (curl + UI): BM25, phrases, AND, `-`/NOT exclusion, field hints, filters; ~7 ms median latency
+- ✅ Search fixes: phrase offsets allow stopword gaps; punctuation/parentheses stripped; NOT supported; "Did you mean" returns full corrected query using display terms
+- ✅ Similar papers fixed (was always empty): uses top TF-IDF title/abstract terms with doc_freq > 1
+- ✅ Frontend runs on macOS (removed Replit-only platform exclusions in pnpm-workspace.yaml); Vite proxies /api; `?q=` URL state; compact search bar layout fixed; paper page links to Semantic Scholar
+- ✅ Tests: 20 unit tests in api-server (`pnpm test`)
+- ✅ Typecheck clean across the monorepo
+- ✅ README rewritten with screenshots in docs/screenshots/; PRD updated
+- ➖ Railway deployment dropped by decision
 
 ## Known Issues
-- semantic-scholar.ts x-api-key fix and ingest.ts pipeline fix are not yet committed
+- All work from the 2026-10-09 session is uncommitted — user commits/pushes themselves
+- Boolean logic is flat: AND makes every term required; parentheses are ignored (no nested grouping)
+- `terms.display_term` is the first unstemmed form seen, so corrections can read oddly (e.g. "transforming" for stem "transform")
+- Typo correction scans up to 10K vocabulary terms linearly (~50 ms)
+- Auth (register/login) and admin routes exist but are unused by the frontend; Save/Share buttons on the paper page are non-functional
 
 ## Next Steps (in order)
-1. Verify pipeline runs end-to-end: `pnpm --filter @workspace/scripts run pipeline`
-2. Verify search works: `curl "http://localhost:3000/api/search?q=neural+network"`
-3. Commit all working changes with message: `fix: pipeline end-to-end, API key header, ingest+index merged`
-4. Write tests for core search logic (query parser, BM25 ranking, Levenshtein)
-5. Set up Railway deployment connected to GitHub main branch
-6. Update PRD to reflect actual built system
-7. Update CLAUDE.md to mark completed items
+1. User reviews and commits the changes
+2. (Optional) Recursive-descent Boolean parser with grouping
+3. (Optional) Track most-frequent unstemmed form for display_term
+4. (Optional) BK-tree or pg_trgm for typo correction
 
 ## Rules for Claude Code
 - Always check Current Status before suggesting what to do next

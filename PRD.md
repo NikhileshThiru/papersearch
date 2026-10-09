@@ -2,7 +2,7 @@
 
 **A Custom Search Engine for Academic Research Papers, Built from Scratch**
 
-v2.0 — Updated to reflect actual implementation
+v3.0 — Complete (local project, no deployment)
 
 ---
 
@@ -21,7 +21,7 @@ The project is intentionally scoped to demonstrate deep understanding of how sea
 - Support multi-field search, Boolean operators, phrase queries, and typo tolerance
 - Build a document ingestion pipeline that fetches, preprocesses, and indexes academic papers from Semantic Scholar
 - Expose a clean REST API with rate limiting and full OpenAPI documentation
-- Deploy permanently on Railway connected to GitHub
+- Ship as a portfolio project: runs locally, documented with screenshots in the README (no hosted deployment)
 
 ---
 
@@ -30,6 +30,7 @@ The project is intentionally scoped to demonstrate deep understanding of how sea
 - Not trying to replace Elasticsearch or compete at web scale — the goal is demonstrating the architecture
 - No ML-based semantic search (dense vector retrieval) in v1 — defined stretch goal
 - No user accounts or JWT auth in v1 — the API is the deliverable
+- No hosted deployment — the project is documented and run locally
 
 ---
 
@@ -37,9 +38,9 @@ The project is intentionally scoped to demonstrate deep understanding of how sea
 
 This project directly complements RefNet. RefNet visualizes citation networks across 250M+ papers — PaperSearch is the search layer that would power how researchers actually find those papers. Same domain, different layer of the stack.
 
-**Resume bullets (fill in real numbers after deployment):**
+**Resume bullet (real numbers):**
 
-> Built a custom search engine for academic papers from scratch in TypeScript/Node.js — inverted index, BM25 ranking, query parser with Boolean operators and phrase queries — without Elasticsearch or any search library. Indexed 1,000+ research papers from Semantic Scholar API. Deployed REST API on Railway.
+> Built a custom search engine for academic papers from scratch in TypeScript/Node.js — inverted index in PostgreSQL, BM25 ranking with field boosts, query parser with Boolean operators and position-verified phrase queries, and Levenshtein typo correction — without Elasticsearch or any search library. Indexed 1,166 papers (12K terms, 101K postings) from the Semantic Scholar API with ~7 ms median query latency.
 
 ---
 
@@ -53,11 +54,11 @@ This project directly complements RefNet. RefNet visualizes citation networks ac
 | ORM | Drizzle ORM |
 | Caching / rate limiting | Redis |
 | Data ingestion | Semantic Scholar Graph API (`x-api-key` auth) |
-| Text processing | Custom preprocessor — tokenization, stopwords, stemming (no external NLP lib) |
+| Text processing | `natural` package for tokenizer, Porter stemmer, stopword list; everything after tokenization is custom |
 | Monorepo tooling | pnpm workspaces |
 | API documentation | OpenAPI spec (`lib/api-spec/openapi.yaml`) + Orval codegen |
 | Dev environment | Local macOS + Neovim + tmux |
-| Deployment | Railway, connected to GitHub main branch, auto-deploy on push |
+| Tests | Node built-in test runner (`node --test` via tsx) |
 
 ---
 
@@ -68,7 +69,6 @@ papersearch/
   artifacts/
     api-server/         @workspace/api-server — Express 5 REST API
     frontend/           @workspace/frontend — React SPA
-    mockup-sandbox/     Throwaway UI prototype (ignore)
   lib/
     db/                 @workspace/db — Drizzle ORM schema + pg connection
     api-spec/           @workspace/api-spec — openapi.yaml + Orval codegen config
@@ -178,22 +178,22 @@ score(t, d) = IDF(t) × (tf(t,d) × (k1 + 1)) / (tf(t,d) + k1 × (1 - b + b × |
 **Query parser** supports:
 - Basic terms: `neural networks` → `[neural, network]`
 - Phrase queries: `"exact phrase"` → position-verified
-- Boolean: `bert AND (classification OR generation)`
-- Exclusion: `machine learning -reinforcement`
+- Boolean: `deep AND learning` (AND makes every term required; parentheses are ignored, no nested grouping)
+- Exclusion: `machine learning -reinforcement` or `machine learning NOT reinforcement`
 - Field hints: `title:transformer abstract:attention`
 
-**Typo tolerance:** If a query term returns 0 results, Levenshtein edit distance against `terms` table. Returns suggestion with distance ≤ 1 (short terms) or ≤ 2 (longer terms).
+**Typo tolerance:** Every query word with no postings is compared (Levenshtein, distance ≤ 2) against the top 10,000 vocabulary terms by document frequency; each is replaced with its closest term's display form and the full corrected query is returned as `suggestion` (e.g. `speach recogniton` → `speech recognition`).
 
 ### 8.4 REST API (`artifacts/api-server/`)
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/search?q=` | Main search — BM25 ranked results |
-| `GET /api/search/suggest?prefix=` | Autocomplete |
-| `GET /api/papers/:id` | Single paper by ID |
-| `GET /api/papers/:id/similar` | Similar papers by term overlap |
+| `GET /api/search/suggest?q=` | Autocomplete |
+| `GET /api/papers/:paperId` | Single paper by Semantic Scholar ID |
+| `GET /api/papers/:paperId/similar` | Similar papers via the paper's top TF-IDF terms |
 | `GET /api/stats` | Index stats (total docs, terms, avgdl) |
-| `GET /health` | Health check (DB + Redis) |
+| `GET /api/health` | Health check (DB + Redis) |
 
 **Sample response:**
 ```json
@@ -231,20 +231,17 @@ score(t, d) = IDF(t) × (tf(t,d) × (k1 + 1)) / (tf(t,d) + k1 × (1 - b + b × |
 
 ---
 
-## 10. Deployment
+## 10. Running Locally
 
-**Development (local):**
 ```bash
 pnpm install
-pnpm --filter @workspace/db push     # apply schema
-pnpm --filter @workspace/api-server dev  # start server on port 3000
-pnpm --filter @workspace/scripts run ingest  # populate + index papers
+pnpm --filter @workspace/db push            # apply schema (reads root .env)
+pnpm --filter @workspace/scripts pipeline   # fetch + index papers
+pnpm --filter @workspace/api-server dev     # API on :3000
+pnpm --filter @workspace/frontend dev       # UI on :5173 (proxies /api to :3000)
 ```
 
-**Production (Railway):**
-- Connected to GitHub `main` branch — auto-deploys on push
-- PostgreSQL and Redis provisioned as Railway services
-- Environment variables set in Railway dashboard
+No hosted deployment — by decision, the project is documented in the README with screenshots instead.
 
 ---
 
@@ -253,24 +250,24 @@ pnpm --filter @workspace/scripts run ingest  # populate + index papers
 | Item | Status |
 |------|--------|
 | API server running locally | ✅ |
+| Frontend running locally (Vite proxy to API) | ✅ |
 | Database schema applied | ✅ |
 | Semantic Scholar API key configured | ✅ |
 | Ingest + index pipeline merged (single command) | ✅ |
-| README.md written | ✅ |
-| End-to-end search verified | ⏳ In progress |
-| Tests written | ❌ Not yet |
-| Railway deployment | ❌ Not yet |
-| 1,000+ papers indexed | ❌ Not yet |
+| 1,000+ papers indexed (1,166 docs, 12,024 terms, 101,329 postings) | ✅ |
+| End-to-end search verified (BM25, phrases, AND/NOT/-, field hints, typo correction, similar papers) | ✅ |
+| Tests written (20 unit tests: query parser, BM25/IDF, Levenshtein) | ✅ |
+| README with screenshots | ✅ |
+| Railway deployment | ➖ Dropped (local-only portfolio project) |
 
 ---
 
-## 12. Build Order (Remaining)
+## 12. Build Order
 
-1. Run pipeline: `pnpm --filter @workspace/scripts run ingest`
-2. Verify search: `curl "http://localhost:3000/api/search?q=neural+network"`
-3. Write tests for query parser, BM25 scorer, Levenshtein
-4. Deploy to Railway
-5. Update status table above with real numbers
+All planned work is complete. Possible future improvements:
+1. Recursive-descent Boolean parser with nested grouping
+2. BK-tree / trigram index for typo correction
+3. Top-k pruning (WAND / MaxScore) for larger corpora
 
 ---
 
@@ -282,7 +279,7 @@ pnpm --filter @workspace/scripts run ingest  # populate + index papers
 | **Why store positions in postings?** | Phrase queries need to verify that matched terms appear consecutively. Without positions, you can't distinguish `"machine learning"` (exact phrase) from a doc that has the words in separate sentences. |
 | **How do you handle concurrent ingestion + queries?** | PostgreSQL MVCC handles this natively. Index updates (UPSERTs to terms, INSERTs to postings) are wrapped in transactions. Search queries never block on writes. |
 | **Why not just use Elasticsearch?** | The goal was to understand how search works at the data structure level. Elasticsearch is a black box — this makes the inverted index, posting lists, and BM25 scoring explicit and inspectable. |
-| **How does typo tolerance work?** | If a query term returns 0 posting list results, compute Levenshtein edit distance against terms in the terms table filtered by similar doc_freq. Return closest match with distance ≤ 1 for short terms, ≤ 2 for longer ones. |
+| **How does typo tolerance work?** | If a query word has no postings, compute Levenshtein distance against the vocabulary (top 10K terms by doc_freq), take the closest term within distance 2, and rewrite the query with it for a "Did you mean" suggestion. A BK-tree or trigram index would make this sub-millisecond. |
 | **How would you scale to 10M papers?** | Partition postings by term_id hash, shard documents across Postgres instances, add pgvector for hybrid BM25 + dense retrieval, distributed Redis for caching. |
 
 ---

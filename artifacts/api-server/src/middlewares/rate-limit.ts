@@ -70,7 +70,7 @@ async function redisCheck(key: string): Promise<{ limited: boolean; retryAfter: 
       .expire(redisKey, Math.ceil(WINDOW_MS / 1000))
       .exec();
 
-    const count = (results?.[1] ?? 0) as number;
+    const count = Number(results?.[1] ?? 0);
 
     if (count >= MAX_REQUESTS) {
       return { limited: true, retryAfter: Math.ceil(WINDOW_MS / 1000) };

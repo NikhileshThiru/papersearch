@@ -16,6 +16,15 @@ const SEED_QUERIES = [
   "machine learning",
   "neural networks",
   "transformer",
+  "reinforcement learning",
+  "computer vision",
+  "natural language processing",
+  "information retrieval",
+  "graph neural networks",
+  "large language models",
+  "generative adversarial networks",
+  "speech recognition",
+  "recommender systems",
 ];
 
 interface IngestionStats {

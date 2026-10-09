@@ -7,9 +7,19 @@ const STOPWORDS = new Set(stopwords);
 
 export type FieldHint = "title" | "abstract" | "authors";
 
+/**
+ * A quoted phrase: stemmed tokens plus each token's position relative to the
+ * first one. Offsets keep the gaps left by removed stopwords, matching how the
+ * indexer records positions.
+ */
+export interface Phrase {
+  tokens: string[];
+  offsets: number[];
+}
+
 export interface ParsedQuery {
   tokens: string[];
-  phrases: string[][];
+  phrases: Phrase[];
   excluded: string[];
   fieldHint: FieldHint | null;
   requireAll: boolean;
@@ -22,6 +32,25 @@ function tokenizeText(text: string): string[] {
     .filter((w) => w && !STOPWORDS.has(w))
     .map((w) => PorterStemmer.stem(w))
     .filter(Boolean);
+}
+
+function tokenizePhrase(text: string): Phrase {
+  const raw = tokenizer.tokenize(text.toLowerCase()) ?? [];
+  const tokens: string[] = [];
+  const positions: number[] = [];
+  raw.forEach((w, i) => {
+    if (!w || STOPWORDS.has(w)) return;
+    const stemmed = PorterStemmer.stem(w);
+    if (!stemmed) return;
+    tokens.push(stemmed);
+    positions.push(i);
+  });
+  return { tokens, offsets: positions.map((p) => p - positions[0]!) };
+}
+
+/** Stem a single word the same way query and index tokens are stemmed. */
+export function stemWord(word: string): string {
+  return PorterStemmer.stem(word.toLowerCase());
 }
 
 const FIELD_ALIASES: Record<string, FieldHint> = {
@@ -39,14 +68,15 @@ const FIELD_ALIASES: Record<string, FieldHint> = {
  *
  * Supported syntax:
  *   "neural networks"   — phrase (position-consecutive match required)
- *   -term               — exclude documents containing this term
+ *   -term / NOT term    — exclude documents containing this term
  *   title:transformer   — restrict token to a specific field
  *   AND                 — sets requireAll=true (all tokens must appear)
  *   OR                  — default behavior, ignored explicitly
+ *   ( )                 — ignored; grouping is not supported
  *   bare words          — stemmed tokens
  */
 export function parseQuery(raw: string): ParsedQuery {
-  const phrases: string[][] = [];
+  const phrases: Phrase[] = [];
   const excluded: string[] = [];
   let fieldHint: FieldHint | null = null;
   let requireAll = false;
@@ -58,22 +88,38 @@ export function parseQuery(raw: string): ParsedQuery {
   const phraseRegex = /"([^"]+)"/g;
   let phraseMatch: RegExpExecArray | null;
   while ((phraseMatch = phraseRegex.exec(input)) !== null) {
-    const phraseTokens = tokenizeText(phraseMatch[1]!);
-    if (phraseTokens.length > 0) {
-      phrases.push(phraseTokens);
-      tokens.push(...phraseTokens);
+    const phrase = tokenizePhrase(phraseMatch[1]!);
+    if (phrase.tokens.length > 0) {
+      phrases.push(phrase);
+      tokens.push(...phrase.tokens);
     }
   }
   input = input.replace(phraseRegex, " ");
 
-  const words = input.split(/\s+/).filter(Boolean);
+  const words = input
+    .split(/\s+/)
+    .map((w) => w.replace(/^\(+|\)+$/g, ""))
+    .filter(Boolean);
 
+  let negateNext = false;
   for (const word of words) {
-    if (word.toUpperCase() === "AND") {
+    const upper = word.toUpperCase();
+    if (upper === "AND") {
       requireAll = true;
       continue;
     }
-    if (word.toUpperCase() === "OR") {
+    if (upper === "OR") {
+      continue;
+    }
+    if (upper === "NOT") {
+      negateNext = true;
+      continue;
+    }
+
+    // Exclusion: -term or NOT term
+    if (negateNext || (word.startsWith("-") && word.length > 1)) {
+      excluded.push(...tokenizeText(word.replace(/^-/, "")));
+      negateNext = false;
       continue;
     }
 
@@ -89,17 +135,8 @@ export function parseQuery(raw: string): ParsedQuery {
       }
     }
 
-    // Exclusion: -term
-    if (word.startsWith("-") && word.length > 1) {
-      excluded.push(...tokenizeText(word.slice(1)));
-      continue;
-    }
-
-    // Regular stemmed word
-    const lower = word.toLowerCase();
-    if (STOPWORDS.has(lower)) continue;
-    const stemmed = PorterStemmer.stem(lower);
-    if (stemmed) tokens.push(stemmed);
+    // Regular word — tokenized like the indexer, so stray punctuation is dropped.
+    tokens.push(...tokenizeText(word));
   }
 
   // Deduplicate tokens preserving order.

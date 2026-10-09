@@ -74,9 +74,22 @@ function toggleField(current: string[], field: string): string[] {
     : [...current, field];
 }
 
+/** Keep the current query in the URL (?q=) so searches are linkable and survive Back. */
+function readQueryFromUrl(): string {
+  return new URLSearchParams(window.location.search).get("q")?.trim() ?? "";
+}
+
+function writeQueryToUrl(q: string) {
+  const params = new URLSearchParams(window.location.search);
+  params.set("q", q);
+  window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+}
+
 export function Home() {
-  const [searchInput, setSearchInput] = useState("");
-  const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState(readQueryFromUrl);
+  const [submittedQuery, setSubmittedQuery] = useState<string | null>(
+    () => readQueryFromUrl() || null,
+  );
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
@@ -126,6 +139,7 @@ export function Home() {
     if (!q) return;
     setSubmittedQuery(q);
     setPage(1);
+    writeQueryToUrl(q);
   };
 
   const handleClearFilters = () => {
@@ -136,6 +150,7 @@ export function Home() {
     setSearchInput(term);
     setSubmittedQuery(term);
     setPage(1);
+    writeQueryToUrl(term);
   };
 
   const totalPages = Math.ceil((searchResults?.total ?? 0) / (searchResults?.pageSize ?? 10));
@@ -223,7 +238,7 @@ export function Home() {
                 />
                 <Button
                   type="submit"
-                  className="absolute right-1 top-1 bottom-1 h-auto px-4 rounded-lg bg-primary/10 text-primary hover:bg-primary/20"
+                  className="absolute right-1 top-1 bottom-1 h-auto px-4 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 no-default-hover-elevate no-default-active-elevate"
                 >
                   Update
                 </Button>
@@ -396,7 +411,7 @@ export function Home() {
                   >
                     <AlertCircle className="w-5 h-5 text-accent shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-sm font-medium text-accent-foreground">Did you mean:</h4>
+                      <h4 className="text-sm font-medium text-muted-foreground">Did you mean:</h4>
                       <button
                         onClick={() => applySuggestion(searchResults.suggestion!)}
                         className="text-base font-semibold text-accent hover:underline underline-offset-4 mt-1"
